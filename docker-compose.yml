@@ -1,0 +1,393 @@
+version: '3.8'
+
+services:
+  # PostgreSQL Database (Optimized for high load)
+  postgres:
+    image: postgres:16-alpine
+    container_name: sentrix-postgres
+    environment:
+      POSTGRES_DB: sentrix
+      POSTGRES_USER: sentrix
+      POSTGRES_PASSWORD: sentrix_secure_pass
+      # Performance tuning
+      POSTGRES_INITDB_ARGS: "-E UTF8 --locale=C"
+    command:
+      - "postgres"
+      - "-c"
+      - "max_connections=500"
+      - "-c"
+      - "shared_buffers=6GB"
+      - "-c"
+      - "effective_cache_size=18GB"
+      - "-c"
+      - "work_mem=64MB"
+      - "-c"
+      - "maintenance_work_mem=1GB"
+      - "-c"
+      - "random_page_cost=1.1"
+      - "-c"
+      - "effective_io_concurrency=200"
+      - "-c"
+      - "wal_buffers=16MB"
+      - "-c"
+      - "min_wal_size=1GB"
+      - "-c"
+      - "max_wal_size=4GB"
+      - "-c"
+      - "checkpoint_completion_target=0.9"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./backend/init_db.sql:/docker-entrypoint-initdb.d/init.sql
+    ports:
+      - "5433:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U sentrix"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - sentrix-network
+    deploy:
+      resources:
+        limits:
+          memory: 8G
+        reservations:
+          memory: 6G
+
+  # PgBouncer Connection Pooler
+  pgbouncer:
+    build:
+      context: ./pgbouncer
+      dockerfile: Dockerfile
+    container_name: sentrix-pgbouncer
+    depends_on:
+      postgres:
+        condition: service_healthy
+    ports:
+      - "6432:6432"
+    environment:
+      - DB_USER=sentrix
+      - DB_PASSWORD=sentrix_secure_pass
+      - DB_HOST=postgres
+      - DB_NAME=sentrix
+    networks:
+      - sentrix-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "psql", "-h", "localhost", "-p", "6432", "-U", "sentrix", "-d", "sentrix", "-c", "SELECT 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Redis Cache (Optimized for high concurrency)
+  redis:
+    image: redis:7-alpine
+    container_name: sentrix-redis
+    command: 
+      - redis-server
+      - --appendonly
+      - "yes"
+      - --requirepass
+      - sentrix_redis_pass
+      - --maxclients
+      - "20000"
+      - --maxmemory
+      - "8gb"
+      - --maxmemory-policy
+      - allkeys-lru
+      - --tcp-backlog
+      - "511"
+      - --timeout
+      - "0"
+      - --hz
+      - "10"
+      - --lazyfree-lazy-eviction
+      - "yes"
+      - --lazyfree-lazy-expire
+      - "yes"
+      - --save
+      - "900 1"
+      - --save
+      - "300 10"
+      - --save
+      - "60 10000"
+    volumes:
+      - redis_data:/data
+    ports:
+      - "6380:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "--raw", "incr", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - sentrix-network
+    deploy:
+      resources:
+        limits:
+          memory: 10G
+        reservations:
+          memory: 8G
+
+  # Zookeeper for Kafka
+  zookeeper:
+    image: confluentinc/cp-zookeeper:7.5.0
+    container_name: sentrix-zookeeper
+    environment:
+      ZOOKEEPER_CLIENT_PORT: 2181
+      ZOOKEEPER_TICK_TIME: 2000
+    volumes:
+      - zookeeper_data:/var/lib/zookeeper/data
+      - zookeeper_logs:/var/lib/zookeeper/log
+    networks:
+      - sentrix-network
+
+  # Kafka Message Broker (Optimized for high throughput)
+  kafka:
+    image: confluentinc/cp-kafka:7.5.0
+    container_name: sentrix-kafka
+    depends_on:
+      - zookeeper
+    ports:
+      - "9092:9092"
+      - "9093:9093"
+    environment:
+      KAFKA_BROKER_ID: 1
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092,PLAINTEXT_HOST://localhost:9093
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      # Performance tuning
+      KAFKA_NUM_NETWORK_THREADS: 8
+      KAFKA_NUM_IO_THREADS: 8
+      KAFKA_SOCKET_SEND_BUFFER_BYTES: 102400
+      KAFKA_SOCKET_RECEIVE_BUFFER_BYTES: 102400
+      KAFKA_SOCKET_REQUEST_MAX_BYTES: 104857600
+      KAFKA_LOG_RETENTION_HOURS: 168
+      KAFKA_LOG_SEGMENT_BYTES: 1073741824
+      KAFKA_COMPRESSION_TYPE: lz4
+    volumes:
+      - kafka_data:/var/lib/kafka/data
+    healthcheck:
+      test: ["CMD", "kafka-broker-api-versions", "--bootstrap-server", "localhost:9092"]
+      interval: 10s
+      timeout: 10s
+      retries: 5
+    networks:
+      - sentrix-network
+    deploy:
+      resources:
+        limits:
+          memory: 2G
+        reservations:
+          memory: 1G
+
+  # DeepSeek R1 AI Model (Ollama - CPU only)
+  deepseek-ai:
+    image: ollama/ollama:latest
+    container_name: sentrix-deepseek-ai
+    volumes:
+      - ollama_data:/root/.ollama
+    ports:
+      - "11434:11434"
+    environment:
+      - OLLAMA_HOST=0.0.0.0
+      - OLLAMA_NUM_PARALLEL=4
+      - OLLAMA_MAX_LOADED_MODELS=1
+      # CPU-only configuration
+      - OLLAMA_NUM_GPU=0
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:11434/api/tags"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    networks:
+      - sentrix-network
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: '6.0'
+          memory: 16G
+        reservations:
+          cpus: '4.0'
+          memory: 12G
+
+  # AI Analysis Service (DeepSeek R1 + PyTorch ML)
+  ai-service:
+    build:
+      context: ./ai-service
+      dockerfile: Dockerfile
+    container_name: sentrix-ai-service
+    depends_on:
+      - deepseek-ai
+      - postgres
+      - redis
+      - kafka
+    environment:
+      - OLLAMA_HOST=http://deepseek-ai:11434
+      - POSTGRES_HOST=postgres
+      - POSTGRES_PORT=5432
+      - POSTGRES_DB=sentrix
+      - POSTGRES_USER=sentrix
+      - POSTGRES_PASSWORD=sentrix_secure_pass
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - REDIS_PASSWORD=sentrix_redis_pass
+      - REDIS_URL=redis://:sentrix_redis_pass@redis:6379/2
+      - KAFKA_BOOTSTRAP_SERVERS=kafka:9092
+    ports:
+      - "5001:5000"
+    volumes:
+      - ai_models:/app/models
+    networks:
+      - sentrix-network
+    restart: unless-stopped
+
+  # Django Backend
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: sentrix-backend
+    depends_on:
+      pgbouncer:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      - DATABASE_URL=postgresql://sentrix:sentrix_secure_pass@pgbouncer:6432/sentrix
+      - REDIS_URL=redis://:sentrix_redis_pass@redis:6379/0
+      - KAFKA_BOOTSTRAP_SERVERS=kafka:9092
+      - SECRET_KEY=your-secret-key-change-in-production
+      - DEBUG=True
+      - ALLOWED_HOSTS=localhost,127.0.0.1,backend
+      - AI_SERVICE_URL=http://ai-service:8002
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./backend:/app
+      - static_volume:/app/staticfiles
+    command: gunicorn config.wsgi:application --bind 0.0.0.0:8000 --workers 8 --threads 4 --worker-class gthread --max-requests 1000 --max-requests-jitter 50 --timeout 60
+    networks:
+      - sentrix-network
+    restart: unless-stopped
+
+  # Celery Worker
+  celery-worker:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: sentrix-celery-worker
+    depends_on:
+      - pgbouncer
+      - redis
+      - kafka
+      - backend
+    environment:
+      - DATABASE_URL=postgresql://sentrix:sentrix_secure_pass@pgbouncer:6432/sentrix
+      - REDIS_URL=redis://:sentrix_redis_pass@redis:6379/0
+      - KAFKA_BOOTSTRAP_SERVERS=kafka:9092
+      - SECRET_KEY=your-secret-key-change-in-production
+      - AI_SERVICE_URL=http://ai-service:8002
+    volumes:
+      - ./backend:/app
+    command: celery -A config worker -l info
+    networks:
+      - sentrix-network
+    restart: unless-stopped
+
+  # SENTRIX Edge - API Gateway with Fast Security Checks
+  edge:
+    build:
+      context: ./edge
+      dockerfile: Dockerfile
+    container_name: sentrix-edge
+    depends_on:
+      - backend
+      - redis
+      - ai-service
+    environment:
+      - REDIS_URL=redis://:sentrix_redis_pass@redis:6379/0
+      - BACKEND_API_URL=http://backend:8000
+      - ANALYZER_URL=http://ai-service:5000
+      - INGEST_URL=http://ingest:8003
+    ports:
+      - "8001:8001"
+    volumes:
+      - ./edge:/app
+    networks:
+      - sentrix-network
+    restart: unless-stopped
+
+  # Example TODO App (Client Application)
+  todo-app:
+    build:
+      context: ./todo-app
+      dockerfile: Dockerfile
+    container_name: todo-app
+    ports:
+      - "5000:5000"
+    networks:
+      - sentrix-network
+    restart: unless-stopped
+
+  # Stream Processor (Kafka → AI Analysis)
+  stream-processor:
+    build:
+      context: ./stream-processor
+      dockerfile: Dockerfile
+    container_name: sentrix-stream-processor
+    depends_on:
+      - kafka
+      - redis
+      - ai-service
+    environment:
+      - KAFKA_BOOTSTRAP_SERVERS=kafka:9092
+      - REDIS_URL=redis://:sentrix_redis_pass@redis:6379/0
+      - AI_SERVICE_URL=http://ai-service:5000
+    networks:
+      - sentrix-network
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+        reservations:
+          memory: 512M
+
+  # FastAPI Ingest Service
+  ingest:
+    build:
+      context: ./ingest
+      dockerfile: Dockerfile
+    container_name: sentrix-ingest
+    depends_on:
+      - kafka
+      - redis
+    environment:
+      - KAFKA_BOOTSTRAP_SERVERS=kafka:9092
+      - REDIS_URL=redis://:sentrix_redis_pass@redis:6379/0
+    ports:
+      - "8003:8003"
+    volumes:
+      - ./ingest:/app
+    command: uvicorn main:app --host 0.0.0.0 --port 8003 --reload
+    networks:
+      - sentrix-network
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
+  redis_data:
+  zookeeper_data:
+  zookeeper_logs:
+  kafka_data:
+  ollama_data:
+  static_volume:
+  ai_models:
+
+networks:
+  sentrix-network:
+    driver: bridge

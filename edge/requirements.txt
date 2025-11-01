@@ -1,0 +1,21 @@
+# FastAPI and ASGI server (async)
+fastapi==0.109.0
+uvicorn[standard]==0.27.0
+uvloop==0.19.0  # High-performance event loop
+
+# Async HTTP client
+httpx==0.26.0
+
+# Async Redis
+redis[hiredis]==5.0.1  # hiredis for C-based parser (faster)
+
+# Data validation
+pydantic==2.5.3
+pydantic-settings==2.1.0
+
+# JWT and crypto
+python-jose[cryptography]==3.3.0
+
+# Monitoring and metrics
+prometheus-client==0.19.0  # For metrics export
+

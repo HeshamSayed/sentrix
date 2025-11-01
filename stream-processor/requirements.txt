@@ -1,0 +1,5 @@
+kafka-python==2.0.2
+httpx==0.26.0
+redis[hiredis]==5.0.1
+asyncio==3.4.3
+
