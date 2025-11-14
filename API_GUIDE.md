@@ -616,3 +616,248 @@ Import the following base URL and create requests as needed:
 - `/ws/detections/` - Real-time detection alerts
 
 Not yet implemented.
+
+---
+
+## Detection Events (Phase 4)
+
+### List Detections
+
+```http
+GET /v1/detection/detections/?app_id={app_id}&severity={severity}&status={status}
+Authorization: Bearer <token>
+```
+
+**Query Parameters:**
+- `app_id` (optional): Filter by application
+- `severity` (optional): Filter by severity (info, low, medium, high, critical)
+- `status` (optional): Filter by status (open, investigating, confirmed, false_positive, resolved)
+- `detector_type` (optional): Filter by detector type
+- `attack_type` (optional): Filter by attack type
+
+**Response:**
+```json
+{
+  "count": 45,
+  "results": [
+    {
+      "detection_id": "uuid",
+      "org": "org-uuid",
+      "org_name": "Acme Corporation",
+      "app": "app-uuid",
+      "app_name": "Payment API",
+      "endpoint": "endpoint-uuid",
+      "endpoint_path": "POST /payments/charge/{id}",
+      "trigger_event_ids": [12345, 12346],
+      "trace_ids": ["trace-123"],
+      "detector_type": "r1_realtime",
+      "detector_name": "SQL Injection Detector",
+      "severity": "high",
+      "confidence_score": 0.95,
+      "r1_score": 0.89,
+      "r1_explanation": {
+        "reasoning": "...",
+        "evidence": [...],
+        "model_version": "r1-distill-v1"
+      },
+      "attack_type": "sqli",
+      "client_ip": "1.2.3.4",
+      "status": "open",
+      "assigned_to": null,
+      "assigned_to_email": null,
+      "detected_at": "2025-11-14T12:00:00Z",
+      "created_at": "2025-11-14T12:00:00Z",
+      "updated_at": "2025-11-14T12:00:00Z"
+    }
+  ]
+}
+```
+
+### Get Detection
+
+```http
+GET /v1/detection/detections/{detection_id}/
+Authorization: Bearer <token>
+```
+
+### Get Detection Summary
+
+```http
+GET /v1/detection/detections/summary/?app_id={app_id}
+Authorization: Bearer <token>
+```
+
+**Response:**
+```json
+{
+  "total": 45,
+  "open": 12,
+  "investigating": 8,
+  "confirmed": 5,
+  "false_positive": 3,
+  "resolved": 17,
+  "by_severity": {
+    "critical": 3,
+    "high": 8,
+    "medium": 15,
+    "low": 12,
+    "info": 7
+  },
+  "by_detector_type": {
+    "rule_based": 20,
+    "statistical": 10,
+    "r1_realtime": 12,
+    "r1_batch": 3
+  },
+  "recent_detections": [...]
+}
+```
+
+### Assign Detection
+
+```http
+POST /v1/detection/detections/{detection_id}/assign/
+Authorization: Bearer <token>
+Content-Type: application/json
+
+{
+  "assigned_to": "user-uuid"
+}
+```
+
+**Effect:** Assigns detection to user and changes status to "investigating" if currently "open".
+
+### Close Detection
+
+```http
+POST /v1/detection/detections/{detection_id}/close/
+Authorization: Bearer <token>
+Content-Type: application/json
+
+{
+  "status": "resolved",
+  "notes": "False alarm - legitimate traffic"
+}
+```
+
+**Status options:**
+- `resolved` - Threat was real and resolved
+- `false_positive` - Not actually a threat
+
+### Update Detection
+
+```http
+PATCH /v1/detection/detections/{detection_id}/
+Authorization: Bearer <token>
+Content-Type: application/json
+
+{
+  "status": "investigating",
+  "assigned_to": "user-uuid"
+}
+```
+
+---
+
+## Dashboard (Phase 4)
+
+### Get Dashboard Summary
+
+```http
+GET /v1/dashboard/summary/?app_id={app_id}&hours={hours}
+Authorization: Bearer <token>
+```
+
+**Query Parameters:**
+- `app_id` (optional): Filter by application
+- `hours` (optional): Time window in hours (default: 24)
+
+**Response:**
+```json
+{
+  "overview": {
+    "total_applications": 5,
+    "total_users": 12,
+    "total_endpoints": 150
+  },
+  "traffic": {
+    "requests_24h": 125000,
+    "blocked_24h": 450,
+    "block_rate": 0.36,
+    "r1_invocations_24h": 1200
+  },
+  "detections": {
+    "total": 45,
+    "open": 12,
+    "investigating": 8,
+    "critical": 3,
+    "high": 8,
+    "medium": 15,
+    "by_severity": {...},
+    "by_status": {...},
+    "recent": [...]
+  },
+  "quota": {
+    "applications": {
+      "current": 5,
+      "limit": 10,
+      "available": 5,
+      "usage_percent": 50.0
+    },
+    "users": {
+      "current": 12,
+      "limit": 20,
+      "available": 8,
+      "usage_percent": 60.0
+    },
+    "requests": {
+      "current": 2500000,
+      "limit": 10000000,
+      "available": 7500000,
+      "usage_percent": 25.0,
+      "period_start": "2025-11-01T00:00:00Z"
+    }
+  },
+  "period_hours": 24
+}
+```
+
+### Get Metrics Time Series
+
+```http
+GET /v1/dashboard/metrics/?app_id={app_id}&metric={metric}&start={start}&end={end}&interval={interval}
+Authorization: Bearer <token>
+```
+
+**Query Parameters:**
+- `app_id` (optional): Filter by application
+- `metric`: Metric name (requests, blocked, detections, latency)
+- `start`: Start time (ISO 8601)
+- `end`: End time (ISO 8601)
+- `interval`: Grouping interval (hour, day)
+
+**Response:**
+```json
+{
+  "metric": "requests",
+  "interval": "hour",
+  "start": "2025-11-14T00:00:00Z",
+  "end": "2025-11-15T00:00:00Z",
+  "data": [
+    {"timestamp": "2025-11-14T00:00:00Z", "value": 1250},
+    {"timestamp": "2025-11-14T01:00:00Z", "value": 1180},
+    {"timestamp": "2025-11-14T02:00:00Z", "value": 1320}
+  ]
+}
+```
+
+---
+
+## Phase 4 Complete
+
+New endpoints added:
+- ✅ Detection management (list, get, assign, close, summary)
+- ✅ Dashboard summary (overview, traffic, detections, quota)
+- ✅ Metrics time-series (placeholder for charts)
+
+All endpoints enforce data isolation by org_id and optional app_id filtering.

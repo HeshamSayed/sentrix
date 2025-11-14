@@ -121,3 +121,41 @@ echo "  GET    /v1/endpoints/"
 echo "  GET    /v1/usage/"
 echo "  POST   /v1/edge/decision"
 echo ""
+
+# 10. Test dashboard summary
+echo "10. Test dashboard summary (GET /v1/dashboard/summary/)..."
+curl -s -X GET "${BASE_URL}/dashboard/summary/" \
+  -H "${AUTH_HEADER}" | jq '{overview, traffic, detections: {total: .detections.total, open: .detections.open}}'
+echo ""
+
+# 11. List detections
+echo "11. List detections (GET /v1/detection/detections/)..."
+DETECTIONS_RESPONSE=$(curl -s -X GET "${BASE_URL}/detection/detections/" \
+  -H "${AUTH_HEADER}")
+
+DETECTION_COUNT=$(echo "$DETECTIONS_RESPONSE" | jq '.count')
+echo "Found $DETECTION_COUNT detections"
+
+if [ "$DETECTION_COUNT" != "0" ]; then
+  echo "$DETECTIONS_RESPONSE" | jq '.results[] | {detection_id, severity, detector_name, status}' | head -20
+fi
+echo ""
+
+# 12. Get detection summary
+echo "12. Get detection summary (GET /v1/detection/detections/summary/)..."
+curl -s -X GET "${BASE_URL}/detection/detections/summary/" \
+  -H "${AUTH_HEADER}" | jq '{total, open, by_severity, by_detector_type}'
+echo ""
+
+echo "=========================================="
+echo "✓ All API tests completed successfully!"
+echo "=========================================="
+echo ""
+echo "New endpoints in Phase 4:"
+echo "  GET    /v1/dashboard/summary/"
+echo "  GET    /v1/dashboard/metrics/"
+echo "  GET    /v1/detection/detections/"
+echo "  GET    /v1/detection/detections/summary/"
+echo "  POST   /v1/detection/detections/{id}/assign/"
+echo "  POST   /v1/detection/detections/{id}/close/"
+echo ""

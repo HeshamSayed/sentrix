@@ -4,6 +4,7 @@ Core API URLs - Organizations, Applications, Users
 from django.urls import path, include
 from rest_framework.routers import DefaultRouter
 from . import views
+from . import dashboard
 
 # Create router and register viewsets
 router = DefaultRouter()
@@ -18,6 +19,10 @@ urlpatterns = [
     # Authentication
     path('auth/login/', views.login, name='login'),
     path('auth/me/', views.me, name='me'),
+
+    # Dashboard
+    path('dashboard/summary/', dashboard.dashboard_summary, name='dashboard-summary'),
+    path('dashboard/metrics/', dashboard.metrics_timeseries, name='dashboard-metrics'),
 
     # Router URLs
     path('', include(router.urls)),
