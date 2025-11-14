@@ -1,0 +1,10 @@
+"""
+Edge app configuration.
+"""
+from django.apps import AppConfig
+
+
+class EdgeConfig(AppConfig):
+    default_auto_field = 'django.db.models.BigAutoField'
+    name = 'edge'
+    verbose_name = 'Edge Decision API'
