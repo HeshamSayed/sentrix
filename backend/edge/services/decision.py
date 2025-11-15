@@ -12,6 +12,13 @@ from uuid import UUID
 import redis.asyncio as aioredis
 from django.conf import settings
 
+# Import policy engine
+import sys
+import os
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), '../../'))
+from policy.evaluator import PolicyMatcher
+from policy.services import PolicyCacheService
+
 logger = logging.getLogger(__name__)
 
 
@@ -29,6 +36,8 @@ class DecisionService:
 
     def __init__(self):
         self.redis_client: Optional[aioredis.Redis] = None
+        self.policy_matcher = PolicyMatcher()
+        self.policy_cache = PolicyCacheService()
 
     async def connect_redis(self):
         """Initialize Redis connection"""
@@ -249,63 +258,58 @@ class DecisionService:
         """
         Evaluate enabled policies against request.
 
-        Policies loaded from Redis cache: policies:{org_id}:{app_id}
+        Policies loaded from cache using PolicyCacheService.
         Returns policy action if match, else None.
         """
-        # Load policies from Redis cache
-        policies_key = f"policies:{org_id}:{app_id}"
-        cached_policies = await self.redis_client.get(policies_key)
-
-        if not cached_policies:
-            # No cached policies, allow
-            return None
-
+        # Load policies from cache (org-level + app-specific)
         try:
-            policies = json.loads(cached_policies)
-        except json.JSONDecodeError:
-            logger.error(f"Failed to decode policies from Redis: {policies_key}")
+            policies = await self.policy_cache.get_policies(org_id, app_id)
+        except Exception as e:
+            logger.error(f"Failed to load policies: {e}")
             return None
 
-        # Evaluate policies in priority order
-        for policy in policies:
-            if not policy.get('is_enabled'):
-                continue
+        if not policies:
+            # No policies configured
+            return None
 
-            if policy.get('mode') != 'enforce':
-                # Observe mode: don't enforce
-                continue
+        # Build event for policy evaluation
+        event = {
+            'method': method,
+            'path': path,
+            'path_pattern': path,  # Could be enriched with pattern matching
+            'client_ip': client_ip,
+            'org_id': org_id,
+            'app_id': app_id
+        }
 
-            # Evaluate condition (simplified - real implementation would use policy engine)
-            if self._matches_policy(policy, method, path, client_ip):
-                action = policy.get('action', {})
-                return {
-                    "action": action.get('type', 'block'),
-                    "reason": f"policy_matched:{policy.get('name')}",
-                    "score": 1.0,
-                    "explanation": f"Blocked by policy: {policy.get('name')}",
-                    "cache_ttl": 60
-                }
+        # Filter only enforce-mode policies
+        enforce_policies = [
+            p for p in policies
+            if p.get('is_enabled') and p.get('mode') == 'enforce'
+        ]
+
+        if not enforce_policies:
+            return None
+
+        # Use PolicyMatcher to find matching policy
+        action = self.policy_matcher.match_policies(event, enforce_policies)
+
+        if action:
+            # Convert policy action to decision format
+            action_type = action.get('type', 'block')
+            policy_name = action.get('policy_name', 'unknown')
+
+            return {
+                "action": action_type,
+                "reason": f"policy_matched:{policy_name}",
+                "score": 1.0,
+                "explanation": action.get('message', f"Matched policy: {policy_name}"),
+                "policy_id": action.get('policy_id'),
+                "policy_name": policy_name,
+                "cache_ttl": 60
+            }
 
         return None
-
-    def _matches_policy(self, policy: Dict, method: str, path: str, client_ip: str) -> bool:
-        """
-        Check if request matches policy condition.
-        Simplified implementation - real version would use policy DSL evaluator.
-        """
-        condition = policy.get('condition', {})
-
-        # Example: {"field": "path_pattern", "op": "eq", "value": "/admin"}
-        if isinstance(condition, dict):
-            field = condition.get('field')
-            op = condition.get('op')
-            value = condition.get('value')
-
-            if field == 'path_pattern' and op == 'eq':
-                return path.startswith(value)
-
-        # TODO: Implement full DSL evaluator
-        return False
 
 
 # Singleton instance

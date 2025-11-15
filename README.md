@@ -275,13 +275,15 @@ See `IMPLEMENTATION_BLUEPRINT.md` Part 9 for complete manual deployment runbook.
 ## Next Implementation Steps
 
 1. ✅ **Phase 0-1 Complete:** Foundation, models, services, decision API, Kafka pipeline, R1 integration
-2. **Phase 2:** Build dashboard APIs with strict app-scoped queries
-3. **Phase 3:** Implement detectors (SQL injection, XSS, rate anomaly)
-4. **Phase 4:** Build React frontend with app switcher
-5. **Phase 5:** Implement policy engine DSL evaluator
-6. **Phase 6:** Deploy real Deepseek-R1 model (replace stub)
-7. **Phase 7:** Nginx edge configuration with OpenResty/Lua
-8. **Phase 8:** End-to-end testing & load testing
+2. ✅ **Phase 2 Complete:** Dashboard APIs with strict app-scoped queries
+3. ✅ **Phase 3 Complete:** Detectors (SQL injection, XSS, rate anomaly)
+4. ✅ **Phase 4 Complete:** Dashboard & Detection APIs
+5. ✅ **Phase 5 Complete:** Threat Detection Pipeline (Kafka → Detectors → R1 → DB)
+6. ✅ **Phase 6 Complete:** Policy Engine (DSL evaluator, simulation, cache, enforcement)
+7. **Phase 7:** Build React frontend with app switcher
+8. **Phase 8:** Deploy real Deepseek-R1 model (replace stub)
+9. **Phase 9:** Nginx edge configuration with OpenResty/Lua
+10. **Phase 10:** End-to-end testing & load testing
 
 ## Monitoring & Observability
 
