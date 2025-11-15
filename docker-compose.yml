@@ -155,6 +155,32 @@ services:
       - ./backend:/app
     restart: unless-stopped
 
+  # Detector Consumer (Threat Detection Pipeline)
+  detector-consumer:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: sentrix-detector-consumer
+    command: python manage.py run_detector_consumer
+    environment:
+      - DEBUG=True
+      - POSTGRES_HOST=postgres
+      - POSTGRES_DB=sentrix
+      - POSTGRES_USER=sentrix
+      - POSTGRES_PASSWORD=sentrix
+      - REDIS_HOST=redis
+      - KAFKA_BOOTSTRAP_SERVERS=kafka:29092
+      - R1_MODEL_SERVER_URL=http://model-server:8001
+    depends_on:
+      - postgres
+      - kafka
+      - model-server
+      - control-plane
+      - enrichment-consumer
+    volumes:
+      - ./backend:/app
+    restart: unless-stopped
+
 volumes:
   postgres_data:
   redis_data:
