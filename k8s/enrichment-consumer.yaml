@@ -1,0 +1,63 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: enrichment-consumer
+  namespace: sentrix
+  labels:
+    app: enrichment-consumer
+    tier: backend
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: enrichment-consumer
+  template:
+    metadata:
+      labels:
+        app: enrichment-consumer
+        tier: backend
+    spec:
+      containers:
+        - name: enrichment-consumer
+          image: sentrix/control-plane:latest
+          imagePullPolicy: Always
+          command:
+            - python
+            - manage.py
+            - run_enrichment_consumer
+          env:
+            - name: DB_USER
+              valueFrom:
+                secretKeyRef:
+                  name: postgres-credentials
+                  key: username
+            - name: DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: postgres-credentials
+                  key: password
+            - name: DJANGO_SECRET_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: django-secret
+                  key: secret-key
+          envFrom:
+            - configMapRef:
+                name: sentrix-config
+          resources:
+            requests:
+              cpu: 500m
+              memory: 1Gi
+            limits:
+              cpu: 2000m
+              memory: 2Gi
+          livenessProbe:
+            exec:
+              command:
+                - python
+                - -c
+                - "import sys; sys.exit(0)"  # Basic process check
+            initialDelaySeconds: 30
+            periodSeconds: 30
+            timeoutSeconds: 5
+            failureThreshold: 3

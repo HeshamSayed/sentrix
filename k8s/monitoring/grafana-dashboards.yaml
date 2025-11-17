@@ -1,0 +1,397 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grafana-dashboards
+  namespace: sentrix
+  labels:
+    app: grafana
+    grafana_dashboard: "1"
+data:
+  sentrix-overview.json: |
+    {
+      "dashboard": {
+        "title": "Sentrix - Overview",
+        "tags": ["sentrix", "overview"],
+        "timezone": "browser",
+        "schemaVersion": 16,
+        "version": 1,
+        "refresh": "30s",
+        "panels": [
+          {
+            "id": 1,
+            "title": "Request Rate",
+            "type": "graph",
+            "gridPos": {"x": 0, "y": 0, "w": 12, "h": 8},
+            "targets": [
+              {
+                "expr": "sum(rate(http_requests_total{namespace=\"sentrix\"}[5m])) by (app)",
+                "legendFormat": "{{app}}",
+                "refId": "A"
+              }
+            ],
+            "yaxes": [
+              {"format": "reqps", "label": "Requests/sec"},
+              {"format": "short"}
+            ]
+          },
+          {
+            "id": 2,
+            "title": "Error Rate",
+            "type": "graph",
+            "gridPos": {"x": 12, "y": 0, "w": 12, "h": 8},
+            "targets": [
+              {
+                "expr": "sum(rate(http_requests_total{namespace=\"sentrix\",status=~\"5..\"}[5m])) by (app) / sum(rate(http_requests_total{namespace=\"sentrix\"}[5m])) by (app)",
+                "legendFormat": "{{app}} error rate",
+                "refId": "A"
+              }
+            ],
+            "yaxes": [
+              {"format": "percentunit", "label": "Error Rate"},
+              {"format": "short"}
+            ]
+          },
+          {
+            "id": 3,
+            "title": "API Latency (P95)",
+            "type": "graph",
+            "gridPos": {"x": 0, "y": 8, "w": 12, "h": 8},
+            "targets": [
+              {
+                "expr": "histogram_quantile(0.95, sum(rate(http_request_duration_seconds_bucket{namespace=\"sentrix\"}[5m])) by (le, app))",
+                "legendFormat": "{{app}} P95",
+                "refId": "A"
+              }
+            ],
+            "yaxes": [
+              {"format": "s", "label": "Latency"},
+              {"format": "short"}
+            ]
+          },
+          {
+            "id": 4,
+            "title": "Detection Events",
+            "type": "graph",
+            "gridPos": {"x": 12, "y": 8, "w": 12, "h": 8},
+            "targets": [
+              {
+                "expr": "sum(rate(detection_events_total{namespace=\"sentrix\"}[5m])) by (detector_type)",
+                "legendFormat": "{{detector_type}}",
+                "refId": "A"
+              }
+            ],
+            "yaxes": [
+              {"format": "short", "label": "Detections/sec"},
+              {"format": "short"}
+            ]
+          },
+          {
+            "id": 5,
+            "title": "Kafka Consumer Lag",
+            "type": "graph",
+            "gridPos": {"x": 0, "y": 16, "w": 12, "h": 8},
+            "targets": [
+              {
+                "expr": "kafka_consumer_lag{namespace=\"sentrix\"}",
+                "legendFormat": "{{consumer_group}} - {{topic}}",
+                "refId": "A"
+              }
+            ],
+            "yaxes": [
+              {"format": "short", "label": "Messages"},
+              {"format": "short"}
+            ]
+          },
+          {
+            "id": 6,
+            "title": "CPU Usage",
+            "type": "graph",
+            "gridPos": {"x": 12, "y": 16, "w": 12, "h": 8},
+            "targets": [
+              {
+                "expr": "sum(rate(container_cpu_usage_seconds_total{namespace=\"sentrix\"}[5m])) by (pod)",
+                "legendFormat": "{{pod}}",
+                "refId": "A"
+              }
+            ],
+            "yaxes": [
+              {"format": "short", "label": "CPU Cores"},
+              {"format": "short"}
+            ]
+          },
+          {
+            "id": 7,
+            "title": "Memory Usage",
+            "type": "graph",
+            "gridPos": {"x": 0, "y": 24, "w": 12, "h": 8},
+            "targets": [
+              {
+                "expr": "sum(container_memory_working_set_bytes{namespace=\"sentrix\"}) by (pod)",
+                "legendFormat": "{{pod}}",
+                "refId": "A"
+              }
+            ],
+            "yaxes": [
+              {"format": "bytes", "label": "Memory"},
+              {"format": "short"}
+            ]
+          },
+          {
+            "id": 8,
+            "title": "Policy Decisions",
+            "type": "piechart",
+            "gridPos": {"x": 12, "y": 24, "w": 12, "h": 8},
+            "targets": [
+              {
+                "expr": "sum(policy_decisions_total{namespace=\"sentrix\"}) by (action)",
+                "legendFormat": "{{action}}",
+                "refId": "A"
+              }
+            ]
+          }
+        ]
+      }
+    }
+
+  sentrix-detection.json: |
+    {
+      "dashboard": {
+        "title": "Sentrix - Threat Detection",
+        "tags": ["sentrix", "detection", "security"],
+        "timezone": "browser",
+        "schemaVersion": 16,
+        "version": 1,
+        "refresh": "30s",
+        "panels": [
+          {
+            "id": 1,
+            "title": "Detections by Type",
+            "type": "graph",
+            "gridPos": {"x": 0, "y": 0, "w": 12, "h": 8},
+            "targets": [
+              {
+                "expr": "sum(rate(detection_events_total{namespace=\"sentrix\"}[5m])) by (detector_type)",
+                "legendFormat": "{{detector_type}}",
+                "refId": "A"
+              }
+            ]
+          },
+          {
+            "id": 2,
+            "title": "Detection Severity",
+            "type": "graph",
+            "gridPos": {"x": 12, "y": 0, "w": 12, "h": 8},
+            "targets": [
+              {
+                "expr": "sum(rate(detection_events_total{namespace=\"sentrix\"}[5m])) by (severity)",
+                "legendFormat": "{{severity}}",
+                "refId": "A"
+              }
+            ]
+          },
+          {
+            "id": 3,
+            "title": "SQL Injection Attempts",
+            "type": "graph",
+            "gridPos": {"x": 0, "y": 8, "w": 12, "h": 8},
+            "targets": [
+              {
+                "expr": "sum(rate(detection_events_total{namespace=\"sentrix\",detector_type=\"sql_injection\"}[5m]))",
+                "legendFormat": "SQL Injection Rate",
+                "refId": "A"
+              }
+            ]
+          },
+          {
+            "id": 4,
+            "title": "XSS Attempts",
+            "type": "graph",
+            "gridPos": {"x": 12, "y": 8, "w": 12, "h": 8},
+            "targets": [
+              {
+                "expr": "sum(rate(detection_events_total{namespace=\"sentrix\",detector_type=\"xss\"}[5m]))",
+                "legendFormat": "XSS Rate",
+                "refId": "A"
+              }
+            ]
+          },
+          {
+            "id": 5,
+            "title": "R1 Model Inference Rate",
+            "type": "graph",
+            "gridPos": {"x": 0, "y": 16, "w": 12, "h": 8},
+            "targets": [
+              {
+                "expr": "sum(rate(model_inference_requests_total{namespace=\"sentrix\"}[5m]))",
+                "legendFormat": "Inference Rate",
+                "refId": "A"
+              }
+            ]
+          },
+          {
+            "id": 6,
+            "title": "R1 Model Latency",
+            "type": "graph",
+            "gridPos": {"x": 12, "y": 16, "w": 12, "h": 8},
+            "targets": [
+              {
+                "expr": "histogram_quantile(0.95, sum(rate(model_inference_duration_seconds_bucket{namespace=\"sentrix\"}[5m])) by (le))",
+                "legendFormat": "P95 Latency",
+                "refId": "A"
+              }
+            ]
+          },
+          {
+            "id": 7,
+            "title": "Top Attacking IPs",
+            "type": "table",
+            "gridPos": {"x": 0, "y": 24, "w": 12, "h": 8},
+            "targets": [
+              {
+                "expr": "topk(10, sum(detection_events_total{namespace=\"sentrix\"}) by (client_ip))",
+                "format": "table",
+                "refId": "A"
+              }
+            ]
+          },
+          {
+            "id": 8,
+            "title": "Detection Confidence Distribution",
+            "type": "heatmap",
+            "gridPos": {"x": 12, "y": 24, "w": 12, "h": 8},
+            "targets": [
+              {
+                "expr": "sum(rate(detection_confidence_bucket{namespace=\"sentrix\"}[5m])) by (le)",
+                "format": "heatmap",
+                "refId": "A"
+              }
+            ]
+          }
+        ]
+      }
+    }
+
+  sentrix-performance.json: |
+    {
+      "dashboard": {
+        "title": "Sentrix - Performance",
+        "tags": ["sentrix", "performance"],
+        "timezone": "browser",
+        "schemaVersion": 16,
+        "version": 1,
+        "refresh": "10s",
+        "panels": [
+          {
+            "id": 1,
+            "title": "Decision API Latency",
+            "type": "graph",
+            "gridPos": {"x": 0, "y": 0, "w": 12, "h": 8},
+            "targets": [
+              {
+                "expr": "histogram_quantile(0.50, sum(rate(http_request_duration_seconds_bucket{endpoint=\"/v1/edge/decision/\"}[1m])) by (le))",
+                "legendFormat": "P50",
+                "refId": "A"
+              },
+              {
+                "expr": "histogram_quantile(0.95, sum(rate(http_request_duration_seconds_bucket{endpoint=\"/v1/edge/decision/\"}[1m])) by (le))",
+                "legendFormat": "P95",
+                "refId": "B"
+              },
+              {
+                "expr": "histogram_quantile(0.99, sum(rate(http_request_duration_seconds_bucket{endpoint=\"/v1/edge/decision/\"}[1m])) by (le))",
+                "legendFormat": "P99",
+                "refId": "C"
+              }
+            ],
+            "yaxes": [
+              {"format": "s", "label": "Latency", "max": 0.1},
+              {"format": "short"}
+            ],
+            "alert": {
+              "conditions": [
+                {
+                  "evaluator": {"params": [0.025], "type": "gt"},
+                  "query": {"params": ["B", "5m", "now"]},
+                  "type": "query"
+                }
+              ],
+              "name": "Decision API P95 > 25ms"
+            }
+          },
+          {
+            "id": 2,
+            "title": "Cache Hit Rate",
+            "type": "graph",
+            "gridPos": {"x": 12, "y": 0, "w": 12, "h": 8},
+            "targets": [
+              {
+                "expr": "sum(rate(cache_hits_total{namespace=\"sentrix\"}[5m])) / (sum(rate(cache_hits_total{namespace=\"sentrix\"}[5m])) + sum(rate(cache_misses_total{namespace=\"sentrix\"}[5m])))",
+                "legendFormat": "Cache Hit Rate",
+                "refId": "A"
+              }
+            ],
+            "yaxes": [
+              {"format": "percentunit", "label": "Hit Rate"},
+              {"format": "short"}
+            ]
+          },
+          {
+            "id": 3,
+            "title": "Database Query Latency",
+            "type": "graph",
+            "gridPos": {"x": 0, "y": 8, "w": 12, "h": 8},
+            "targets": [
+              {
+                "expr": "histogram_quantile(0.95, sum(rate(db_query_duration_seconds_bucket{namespace=\"sentrix\"}[5m])) by (le, query_type))",
+                "legendFormat": "{{query_type}} P95",
+                "refId": "A"
+              }
+            ]
+          },
+          {
+            "id": 4,
+            "title": "Kafka Throughput",
+            "type": "graph",
+            "gridPos": {"x": 12, "y": 8, "w": 12, "h": 8},
+            "targets": [
+              {
+                "expr": "sum(rate(kafka_messages_consumed_total{namespace=\"sentrix\"}[5m])) by (topic)",
+                "legendFormat": "{{topic}} consumed",
+                "refId": "A"
+              },
+              {
+                "expr": "sum(rate(kafka_messages_produced_total{namespace=\"sentrix\"}[5m])) by (topic)",
+                "legendFormat": "{{topic}} produced",
+                "refId": "B"
+              }
+            ]
+          },
+          {
+            "id": 5,
+            "title": "Redis Operations",
+            "type": "graph",
+            "gridPos": {"x": 0, "y": 16, "w": 12, "h": 8},
+            "targets": [
+              {
+                "expr": "sum(rate(redis_commands_processed_total{namespace=\"sentrix\"}[5m])) by (cmd)",
+                "legendFormat": "{{cmd}}",
+                "refId": "A"
+              }
+            ]
+          },
+          {
+            "id": 6,
+            "title": "Request Size Distribution",
+            "type": "heatmap",
+            "gridPos": {"x": 12, "y": 16, "w": 12, "h": 8},
+            "targets": [
+              {
+                "expr": "sum(rate(http_request_size_bytes_bucket{namespace=\"sentrix\"}[5m])) by (le)",
+                "format": "heatmap",
+                "refId": "A"
+              }
+            ]
+          }
+        ]
+      }
+    }

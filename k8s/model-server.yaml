@@ -1,0 +1,128 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: model-server
+  namespace: sentrix
+  labels:
+    app: model-server
+    tier: ml
+spec:
+  replicas: 1  # Scale based on GPU availability
+  selector:
+    matchLabels:
+      app: model-server
+  template:
+    metadata:
+      labels:
+        app: model-server
+        tier: ml
+    spec:
+      # GPU node affinity - ensure pods run on GPU nodes
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+              - matchExpressions:
+                  - key: accelerator
+                    operator: In
+                    values:
+                      - nvidia-gpu
+                      - gpu
+      containers:
+        - name: model-server
+          image: sentrix/model-server:latest
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 8001
+              name: http
+              protocol: TCP
+          env:
+            - name: MODEL_NAME
+              value: "deepseek-r1"
+            - name: MODEL_PATH
+              value: "/models/deepseek-r1"
+            - name: BATCH_SIZE
+              value: "8"
+            - name: MAX_LENGTH
+              value: "512"
+          volumeMounts:
+            - name: model-cache
+              mountPath: /models
+          resources:
+            requests:
+              cpu: 2000m
+              memory: 8Gi
+              nvidia.com/gpu: 1  # Request 1 GPU
+            limits:
+              cpu: 8000m
+              memory: 16Gi
+              nvidia.com/gpu: 1  # Limit to 1 GPU
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8001
+            initialDelaySeconds: 60  # Model loading can take time
+            periodSeconds: 30
+            timeoutSeconds: 10
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8001
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+      volumes:
+        - name: model-cache
+          emptyDir: {}
+          # For production, use PersistentVolumeClaim:
+          # persistentVolumeClaim:
+          #   claimName: model-cache-pvc
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: model-server
+  namespace: sentrix
+  labels:
+    app: model-server
+spec:
+  type: ClusterIP
+  ports:
+    - port: 8001
+      targetPort: 8001
+      protocol: TCP
+      name: http
+  selector:
+    app: model-server
+
+---
+# HorizontalPodAutoscaler for model-server (optional)
+# Requires metrics-server to be installed
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: model-server-hpa
+  namespace: sentrix
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: model-server
+  minReplicas: 1
+  maxReplicas: 4
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 70
+    - type: Resource
+      resource:
+        name: memory
+        target:
+          type: Utilization
+          averageUtilization: 80
